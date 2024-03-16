@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
   double etime = MPI_Wtime();
 
   if (my_rank == 0) {
-    printf("Global Sum: %d\n", global_sum);
+    printf("Global Sum: %u\n", global_sum);
     printf("Total time: %f\n", etime - stime);
   }
 
