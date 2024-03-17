@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
 
   size_t global_sum;
 
-  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
   double etime = MPI_Wtime();
 
