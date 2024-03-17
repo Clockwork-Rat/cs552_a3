@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
         current_high += step_size;
         for (int n = 0; n < localN; ++n) {
           if (n >= current_low && n < current_high) {
-            ++current_b;
+            current_b += step_size;
           }
         }
       }
