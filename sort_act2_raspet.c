@@ -15,17 +15,6 @@ int compfn (const void * a, const void * b)
   return ( *(int*)a - *(int*)b );
 }
 
-
-//Do not change the seed
-#define SEED 72
-#define MAXVAL 1000000
-//#define MAXVAL 10000
-
-//Total input size is N, divided by nprocs
-//Doesn't matter if N doesn't evenly divide nprocs
-#define N 1000000000
-//#define N 1000
-
 size_t sum(int size, int *data) {
   size_t ret = 0;
   
@@ -35,6 +24,16 @@ size_t sum(int size, int *data) {
 
   return ret;
 }
+
+
+//Do not change the seed
+#define SEED 72
+#define MAXVAL 1000000
+
+//Total input size is N, divided by nprocs
+//Doesn't matter if N doesn't evenly divide nprocs
+#define N 1000000000
+//#define N 1000
 
 int main(int argc, char **argv) {
 
@@ -61,9 +60,14 @@ int main(int argc, char **argv) {
   int * myDataSet=(int*)malloc(sizeof(int)*N); //upper bound size is N elements for the rank
 
 
-  // need this for every rank
+  //Write code here
+
+  double sdtime = MPI_Wtime();
+
+  // rank zero gets all ranges for each bucket
 
   unsigned int bucket_ranges[nprocs][2];
+
 
   if (my_rank == 0)
     for (size_t i = 0; i < nprocs; ++i) {
@@ -80,6 +84,8 @@ int main(int argc, char **argv) {
       }
     }
   
+  // rank zero broadcasts ranges to all other ranks
+
   MPI_Bcast(&bucket_ranges, nprocs * 2, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 
   // count and collect bucket
@@ -100,8 +106,6 @@ int main(int argc, char **argv) {
 
   // go through each rank -- each taking a turn as a reciever
 
-  double stime = MPI_Wtime();
-
   for (size_t i = 0; i < nprocs; ++i) {
     if (my_rank == i) {
       for (size_t send_rank = 0; send_rank < nprocs; ++send_rank) {
@@ -117,9 +121,14 @@ int main(int argc, char **argv) {
           // get size
           MPI_Request req1;
           MPI_Request req2;
+          // receive recieve size
+          // this segment could be an MPI_Recv rather than an Irecv but using these waits makes it not matter
+          // these do need to block because recv_size needs to be recieved before dataset
           MPI_Irecv(&recv_size, 1, MPI_INT, send_rank, 0, MPI_COMM_WORLD, &req1);
-          MPI_Wait(&req1, MPI_STATUS_IGNORE);
+          MPI_Wait(&req1, MPI_STATUS_IGNORE); // wait to get sent information
           // get numbers
+          // this is a way to do this that negates the need for the recvbuffer. These values can be received directly into the dataset
+          // with no need to move the values over
           MPI_Irecv(&myDataSet[recv_start], recv_size, MPI_INT, send_rank, 0, MPI_COMM_WORLD, &req2);
           MPI_Wait(&req2, MPI_STATUS_IGNORE);
           recv_start += recv_size;
@@ -130,7 +139,9 @@ int main(int argc, char **argv) {
       MPI_Request req1;
       MPI_Request req2;
 
-      // collect 
+      // collect data for specific bucket
+      // this becomes less efficient as more ranks p are introduced
+      // time complexity is n * p
       int index = 0;
       for ( int n = 0; n < localN; ++n ) {
         if(data[n] >= bucket_ranges[i][0] && data[n] < bucket_ranges[i][1]) {
@@ -141,7 +152,8 @@ int main(int argc, char **argv) {
 
       // send the number to collect
       if (index > localN) index = localN; // cap received elements -- with the way the code is set up this is impossible to
-      // overflow, as data only contains localn elements
+      // overflow, as data only contains localn elements -- this is an uneccessary check as it is not possible to 
+      // receieve more than this
       MPI_Isend(&index, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &req1);
       MPI_Wait(&req1, MPI_STATUS_IGNORE);
 
@@ -150,12 +162,17 @@ int main(int argc, char **argv) {
       MPI_Wait(&req2, MPI_STATUS_IGNORE);
     }
   }
+
+  double edtime = MPI_Wtime();
   
   size_t pre_sort_sum = sum(recv_start, myDataSet);
   
+  double sstime = MPI_Wtime();
 
   // sort dataset
   qsort(myDataSet, recv_start, sizeof(int), compfn);
+
+  double estime = MPI_Wtime();
 
   int same_size = pre_sort_sum == sum(recv_start, myDataSet);
 
@@ -169,11 +186,10 @@ int main(int argc, char **argv) {
 
   MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
-  double etime = MPI_Wtime();
-
   if (my_rank == 0) {
     printf("Global Sum: %u\n", global_sum);
-    printf("Total time: %f\n", etime - stime);
+    printf("Total distribution time: %f\n", edtime - sdtime);
+    printf("Total sort time: %f\n", estime - sstime);
   }
 
   // debug print dataset
@@ -182,6 +198,7 @@ int main(int argc, char **argv) {
   //  printf("%d, ", myDataSet[i]);
   //}
   //printf("\n");
+
 
   //free
   free(data); 
@@ -194,13 +211,28 @@ int main(int argc, char **argv) {
 }
 
 
-//generates data [0,MAXVAL)
+double randomExponential(double lambda){
+    double u = rand() / (RAND_MAX + 1.0);
+    return -log(1- u) / lambda;
+}
+
+//generates data [0,1000000)
 void generateData(int * data, int SIZE)
 {
   for (int i=0; i<SIZE; i++)
   {
-  
-  data[i]=rand()%MAXVAL;
+    double tmp=0; 
+    
+    //generate value between 0-1 using exponential distribution
+    do{
+    tmp=randomExponential(4.0);
+    // printf(nrnd: %f,tmp);
+    }while(tmp>=1.0);
+    
+    data[i]=tmp*MAXVAL;
+    
   }
+
+  
 }
 

@@ -11,6 +11,6 @@
 
 module load openmpi
 
-mpicc -O3 ~/cs552/cs552_a3/distribution_sort_act3_raspet.c -lm -o ~/out_act3_7
+mpicc -O3 ~/cs552/cs552_a3/sort_act3_raspet.c -lm -o ~/out_act3_7
 
 srun ~/out_act3_7

@@ -15,6 +15,17 @@ int compfn (const void * a, const void * b)
   return ( *(int*)a - *(int*)b );
 }
 
+
+//Do not change the seed
+#define SEED 72
+#define MAXVAL 1000000
+//#define MAXVAL 10000
+
+//Total input size is N, divided by nprocs
+//Doesn't matter if N doesn't evenly divide nprocs
+#define N 1000000000
+//#define N 1000
+
 size_t sum(int size, int *data) {
   size_t ret = 0;
   
@@ -24,15 +35,6 @@ size_t sum(int size, int *data) {
 
   return ret;
 }
-
-//Do not change the seed
-#define SEED 72
-#define MAXVAL 1000000
-
-//Total input size is N, divided by nprocs
-//Doesn't matter if N doesn't evenly divide nprocs
-#define N 1000000000
-//#define N 1000
 
 int main(int argc, char **argv) {
 
@@ -59,48 +61,28 @@ int main(int argc, char **argv) {
   int * myDataSet=(int*)malloc(sizeof(int)*N); //upper bound size is N elements for the rank
 
 
-  //Write code here
+  // need this for every rank
 
-    // need this for every rank
+  double sdtime = MPI_Wtime();
 
   unsigned int bucket_ranges[nprocs][2];
-  unsigned int step_size = 4;
 
+  if (my_rank == 0)
+    for (size_t i = 0; i < nprocs; ++i) {
 
-  // generate and distribute ranges
-  if ( my_rank == 0 ) {
-    int current_low = 0;
-    int current_high = 2;
+      //Write code here
+      bucket_ranges[i][0] = i * (MAXVAL / nprocs);
 
-    for (size_t i = 0; i < (nprocs - 1); ++i) {
-      unsigned int b = localN/nprocs;
-      unsigned int current_b;
-
-      // locate high number
-      while (current_b < b){
-        current_b = 0;
-        current_high += step_size;
-        for (int n = 0; n < localN; ++n) {
-          if (n >= current_low && n < current_high) {
-            current_b += step_size;
-          }
-        }
+      if (i == nprocs - 1) {
+        bucket_ranges[i][1] = MAXVAL;
       }
 
-      bucket_ranges[i][0] = current_low;
-      bucket_ranges[i][1] = current_high;
-      current_low = current_high;
-      current_high = current_low + step_size;
+      else {
+        bucket_ranges[i][1] = (i + 1) * (MAXVAL / nprocs);
+      }
     }
-
-    if (nprocs > 1)
-      bucket_ranges[nprocs - 1][0] = current_high;
-    else
-      bucket_ranges[nprocs - 1][0] = 0;
-    bucket_ranges[nprocs - 1][1] = MAXVAL;
-  }
   
-  MPI_Bcast(&bucket_ranges, 0, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&bucket_ranges, nprocs * 2, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 
   // count and collect bucket
   int recv_size;
@@ -119,9 +101,6 @@ int main(int argc, char **argv) {
   // possible to just start the count over and overwrite previous data. In either of these approaches data is lost
 
   // go through each rank -- each taking a turn as a reciever
-
-  double stime = MPI_Wtime();
-
   for (size_t i = 0; i < nprocs; ++i) {
     if (my_rank == i) {
       for (size_t send_rank = 0; send_rank < nprocs; ++send_rank) {
@@ -135,6 +114,8 @@ int main(int argc, char **argv) {
           }
         } else {
           // get size
+          // these are async but they don't need to be
+          // this should still run fine
           MPI_Request req1;
           MPI_Request req2;
           MPI_Irecv(&recv_size, 1, MPI_INT, send_rank, 0, MPI_COMM_WORLD, &req1);
@@ -171,7 +152,11 @@ int main(int argc, char **argv) {
     }
   }
   
+  double edtime = MPI_Wtime();
+
   size_t pre_sort_sum = sum(recv_start, myDataSet);
+
+  double sstime = MPI_Wtime();
   
 
   // sort dataset
@@ -187,13 +172,14 @@ int main(int argc, char **argv) {
 
   size_t global_sum;
 
-  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
-  double etime = MPI_Wtime();
+  double estime = MPI_Wtime();
 
   if (my_rank == 0) {
     printf("Global Sum: %u\n", global_sum);
-    printf("Total time: %f\n", etime - stime);
+    printf("Total distribution time: %f\n", edtime - sdtime);
+    printf("Total sort time: %f\n", estime - sstime);
   }
 
   // debug print dataset
@@ -202,7 +188,6 @@ int main(int argc, char **argv) {
   //  printf("%d, ", myDataSet[i]);
   //}
   //printf("\n");
-
 
   //free
   free(data); 
@@ -215,28 +200,13 @@ int main(int argc, char **argv) {
 }
 
 
-double randomExponential(double lambda){
-    double u = rand() / (RAND_MAX + 1.0);
-    return -log(1- u) / lambda;
-}
-
-//generates data [0,1000000)
+//generates data [0,MAXVAL)
 void generateData(int * data, int SIZE)
 {
   for (int i=0; i<SIZE; i++)
   {
-    double tmp=0; 
-    
-    //generate value between 0-1 using exponential distribution
-    do{
-    tmp=randomExponential(4.0);
-    // printf(nrnd: %f,tmp);
-    }while(tmp>=1.0);
-    
-    data[i]=tmp*MAXVAL;
-    
-  }
-
   
+  data[i]=rand()%MAXVAL;
+  }
 }
 

@@ -25,7 +25,6 @@ size_t sum(int size, int *data) {
   return ret;
 }
 
-
 //Do not change the seed
 #define SEED 72
 #define MAXVAL 1000000
@@ -64,25 +63,67 @@ int main(int argc, char **argv) {
 
     // need this for every rank
 
+  unsigned int n_fake_buckets = nprocs * 4;
+
+  unsigned int hist[n_fake_buckets][3]; // this is low, high, counter
   unsigned int bucket_ranges[nprocs][2];
+  unsigned int step_size = 4;
 
+  double sdtime = MPI_Wtime();
 
-  if (my_rank == 0)
-    for (size_t i = 0; i < nprocs; ++i) {
-
+  // generate and distribute ranges
+  if ( my_rank == 0 && nprocs > 1) {
+    // create fake buckets
+    for (size_t i = 0; i < n_fake_buckets; ++i) {
       //Write code here
-      bucket_ranges[i][0] = i * (MAXVAL / nprocs);
+      hist[i][0] = i * (MAXVAL / n_fake_buckets);
 
-      if (i == nprocs - 1) {
-        bucket_ranges[i][1] = MAXVAL;
+      if (i == n_fake_buckets - 1) {
+        hist[i][1] = MAXVAL;
       }
 
       else {
-        bucket_ranges[i][1] = (i + 1) * (MAXVAL / nprocs);
+        hist[i][1] = (i + 1) * (MAXVAL / n_fake_buckets);
       }
     }
+
+    //assign value to eahc in hist
+    for (int n = 0; n < localN; ++n) {
+      for (int i = 0; i < n_fake_buckets; ++i) {
+        if (data[n] >= hist[i][0] && data[n] < hist[i][1]) {
+          ++hist[i][2];
+          break;
+        }
+      }
+    }
+
+    int current_low = 0;
+    size_t proc = 0;
+    size_t current_b = 0;
+    const size_t b =  localN/nprocs;
+
+    for (int i = 0; i < n_fake_buckets - 1; ++i) {
+      // assign values
+      if (current_b >= b) {
+        bucket_ranges[proc][0] = current_low;
+        bucket_ranges[proc][1] = hist[i][0];
+        current_low = hist[i][0];
+        //check if second to last -- we can guaruntee that there are at least
+        //2 procs
+        if (i == n_fake_buckets - 2) {
+          // idk
+        }
+      } else {
+        current_b += hist[i][2];
+        ++proc;
+      }
+    }
+  } else {
+    bucket_ranges[0][0] = 0;
+    bucket_ranges[0][1] = MAXVAL;
+  }
   
-  MPI_Bcast(&bucket_ranges, nprocs * 2, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&bucket_ranges, 0, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 
   // count and collect bucket
   int recv_size;
@@ -101,9 +142,6 @@ int main(int argc, char **argv) {
   // possible to just start the count over and overwrite previous data. In either of these approaches data is lost
 
   // go through each rank -- each taking a turn as a reciever
-
-  double stime = MPI_Wtime();
-
   for (size_t i = 0; i < nprocs; ++i) {
     if (my_rank == i) {
       for (size_t send_rank = 0; send_rank < nprocs; ++send_rank) {
@@ -152,12 +190,17 @@ int main(int argc, char **argv) {
       MPI_Wait(&req2, MPI_STATUS_IGNORE);
     }
   }
+
+  double edtime = MPI_Wtime();
   
   size_t pre_sort_sum = sum(recv_start, myDataSet);
   
+  double sstime = MPI_Wtime();
 
   // sort dataset
   qsort(myDataSet, recv_start, sizeof(int), compfn);
+
+  double estime = MPI_Wtime();
 
   int same_size = pre_sort_sum == sum(recv_start, myDataSet);
 
@@ -169,13 +212,12 @@ int main(int argc, char **argv) {
 
   size_t global_sum;
 
-  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-
-  double etime = MPI_Wtime();
+  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
   if (my_rank == 0) {
     printf("Global Sum: %u\n", global_sum);
-    printf("Total time: %f\n", etime - stime);
+    printf("Total distribution time: %f\n", edtime - sdtime);
+    printf("Total sort time: %f\n", estime - sstime);
   }
 
   // debug print dataset
