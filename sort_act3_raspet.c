@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
   unsigned int n_fake_buckets = nprocs * 4;
 
   unsigned int hist[n_fake_buckets][3]; // this is low, high, counter
-  unsigned int bucket_ranges[nprocs][2];
+  unsigned int bucket_ranges[nprocs][3];
   unsigned int step_size = 4;
 
   double sdtime = MPI_Wtime();
@@ -101,9 +101,11 @@ int main(int argc, char **argv) {
     size_t proc = 0;
     size_t current_b = 0;
     const size_t b =  localN/nprocs;
+    int valid = 0;
 
-    for (int i = 0; i < n_fake_buckets - 1; ++i) {
+    for (int i = 0; i < n_fake_buckets - 1 && proc < nprocs; ++i) {
       // assign values
+      // if this is a subsequent run, adjust the bucket for rank 1 by one
       if (current_b >= b) {
         bucket_ranges[proc][0] = current_low;
         bucket_ranges[proc][1] = hist[i][0];
@@ -111,13 +113,17 @@ int main(int argc, char **argv) {
         //check if second to last -- we can guaruntee that there are at least
         //2 procs
         if (i == n_fake_buckets - 2) {
-          // idk
+          valid = 1;
+          // if this doesn't work, earlier buckets need to be rearranged
         }
+        ++proc;
       } else {
         current_b += hist[i][2];
-        ++proc;
       }
     }
+    //set last bucket
+    bucket_ranges[nprocs - 1][0] = bucket_ranges[nprocs - 2][1];
+    bucket_ranges[nprocs - 1][1] = MAXVAL;
   } else {
     bucket_ranges[0][0] = 0;
     bucket_ranges[0][1] = MAXVAL;
