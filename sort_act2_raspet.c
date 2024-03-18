@@ -172,6 +172,8 @@ int main(int argc, char **argv) {
   // sort dataset
   qsort(myDataSet, recv_start, sizeof(int), compfn);
 
+  MPI_Barrier(MPI_COMM_WORLD);
+
   double estime = MPI_Wtime();
 
   int same_size = pre_sort_sum == sum(recv_start, myDataSet);

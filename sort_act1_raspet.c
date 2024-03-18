@@ -162,6 +162,10 @@ int main(int argc, char **argv) {
   // sort dataset
   qsort(myDataSet, recv_start, sizeof(int), compfn);
 
+  MPI_Barrier(MPI_COMM_WORLD); // just ensure all have sorted to get an accurate time
+
+  double estime = MPI_Wtime();
+
   int same_size = pre_sort_sum == sum(recv_start, myDataSet);
 
   if (same_size) {
@@ -174,7 +178,6 @@ int main(int argc, char **argv) {
 
   MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
-  double estime = MPI_Wtime();
 
   if (my_rank == 0) {
     printf("Global Sum: %u\n", global_sum);
