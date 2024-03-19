@@ -15,8 +15,8 @@ int compfn (const void * a, const void * b)
   return ( *(int*)a - *(int*)b );
 }
 
-size_t sum(int size, int *data) {
-  size_t ret = 0;
+unsigned long long int sum(int size, int *data) {
+  unsigned long long int ret = 0;
   
   for (int i = 0; i < size; ++i) {
     ret += data[i];
@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
 
   double edtime = MPI_Wtime();
   
-  size_t pre_sort_sum = sum(recv_start, myDataSet);
+  unsigned long long int pre_sort_sum = sum(recv_start, myDataSet);
   
   double sstime = MPI_Wtime();
 
@@ -218,9 +218,9 @@ int main(int argc, char **argv) {
     printf("%d, False\n", my_rank);
   }
 
-  size_t global_sum;
+  unsigned long long int global_sum;
 
-  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&pre_sort_sum, &global_sum, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
   if (my_rank == 0) {
     printf("Global Sum: %u\n", global_sum);
