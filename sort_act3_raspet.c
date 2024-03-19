@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
     bucket_ranges[0][1] = MAXVAL;
   }
   
-  MPI_Bcast(bucket_ranges, nprocs * 3, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&bucket_ranges, nprocs * 3, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 
   // count and collect bucket
   int recv_size;
